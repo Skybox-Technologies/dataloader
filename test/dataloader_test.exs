@@ -1,6 +1,7 @@
 defmodule DataloaderTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureLog
+  import Mox
 
   doctest Dataloader
 
@@ -36,6 +37,8 @@ defmodule DataloaderTest do
 
     {key, item}
   end
+
+  setup :verify_on_exit!
 
   setup do
     loader =
@@ -101,6 +104,54 @@ defmodule DataloaderTest do
         |> Dataloader.run()
         |> Dataloader.get(:bogus, :users, "ben")
       end
+    end
+  end
+
+  describe "run/1" do
+    test "exceeds timeout" do
+      Dataloader.TestSource.MockSource
+      # lowest possible timeout
+      |> expect(:timeout, fn _ -> 1 end)
+      # false would skip invoking Source.run/1
+      |> expect(:pending_batches?, fn _ -> true end)
+      # Dataloader adds one second to every timeout, to trigger timeout we
+      # need to hold longer than <timeout> + 1s
+      |> expect(:run, fn _ -> Process.sleep(2) end)
+
+      loader =
+        Dataloader.new(get_policy: :tuples, async?: true, timeout_margin: 0)
+        |> Dataloader.add_source(:test, %Dataloader.TestSource.SourceImpl{})
+        |> Dataloader.run()
+
+      # Dataloader replaces the source struct with error tuple. There is
+      # reasonable recovery from timeout.
+      assert %{sources: %{test: {:error, :timeout}}} = loader
+      # put changes nothing
+      assert ^loader = Dataloader.put(loader, :test, :foo, :bar, :baz)
+      # load changes nothing
+      assert ^loader = Dataloader.load(loader, :test, :foo, :bar)
+      # get returns the error, nil or raises a GetError
+      assert {:error, :timeout} == Dataloader.get(loader, :test, :foo, :bar)
+    end
+
+    test "use highest timeout plus margin as timeout for all tasks" do
+      Dataloader.TestSource.MockSource
+      |> expect(:timeout, 2, fn %{timeout: t} -> t end)
+      # pending_batches? is only checked for any?
+      |> expect(:pending_batches?, fn _ -> true end)
+      # Sleep for 2ms (not triggering timeout) or 11ms (triggering timeout)
+      |> expect(:run, 2, fn s ->
+        Process.sleep(s.timeout + 1)
+        s
+      end)
+
+      loader =
+        Dataloader.new(get_policy: :tuples, async?: true, timeout_margin: 0)
+        |> Dataloader.add_source(:test_1, %Dataloader.TestSource.SourceImpl{timeout: 1})
+        |> Dataloader.add_source(:test_10, %Dataloader.TestSource.SourceImpl{timeout: 10})
+        |> Dataloader.run()
+
+      assert %{sources: %{test_1: %{}, test_10: {:error, :timeout}}} = loader
     end
   end
 

@@ -92,9 +92,13 @@ defmodule Dataloader do
           options: [option]
         }
 
-  @type option :: {:timeout, pos_integer} | {:get_policy, atom()}
+  @type option ::
+          {:timeout, pos_integer}
+          | {:get_policy, atom()}
+          | {:timeout_margin, non_neg_integer}
   @type source_name :: any
 
+  @default_timeout_margin 1_000
   @default_timeout 15_000
   def default_timeout, do: @default_timeout
 
@@ -108,7 +112,7 @@ defmodule Dataloader do
   @spec new([option]) :: t
   def new(opts \\ []) do
     opts =
-      [get_policy: @default_get_policy]
+      [get_policy: @default_get_policy, timeout_margin: @default_timeout_margin]
       |> Keyword.merge(opts)
 
     %__MODULE__{options: opts}
@@ -134,6 +138,8 @@ defmodule Dataloader do
   def load(loader, source_name, batch_key, val) do
     load_many(loader, source_name, batch_key, [val])
   end
+
+  defp do_load({:error, error}, _, _), do: {:error, error}
 
   defp do_load(source, batch_key, vals) do
     Enum.reduce(vals, source, &Source.load(&2, batch_key, &1))
@@ -187,7 +193,7 @@ defmodule Dataloader do
         |> Stream.concat(sync_source_results)
         |> Stream.map(fn
           {_source, {:ok, {name, source}}} -> {name, source}
-          {_source, {:error, reason}} -> {:error, reason}
+          {{name, _}, {:error, reason}} -> {name, {:error, reason}}
         end)
         |> Map.new()
 
@@ -220,18 +226,18 @@ defmodule Dataloader do
   defp dataloader_timeout(dataloader) do
     max_source_timeout =
       dataloader.sources
-      |> Enum.map(fn {_, source} -> Source.timeout(source) end)
+      |> Enum.map(fn {_, source} -> do_timeout(source) end)
       |> Enum.reject(&is_nil/1)
       |> Enum.max(fn -> @default_timeout end)
 
-    max_source_timeout + :timer.seconds(1)
+    max_source_timeout + Keyword.get(dataloader.options, :timeout_margin, @default_timeout_margin)
   end
 
   @spec get(t, source_name, any, any) :: any
   def get(loader = %Dataloader{options: options}, source, batch_key, item_key) do
     loader
     |> get_source(source)
-    |> Source.fetch(batch_key, item_key)
+    |> do_fetch(batch_key, item_key)
     |> do_get(options[:get_policy])
   end
 
@@ -242,10 +248,13 @@ defmodule Dataloader do
 
     for key <- item_keys do
       source
-      |> Source.fetch(batch_key, key)
+      |> do_fetch(batch_key, key)
       |> do_get(options[:get_policy])
     end
   end
+
+  defp do_fetch({:error, reason}, _, _), do: {:error, reason}
+  defp do_fetch(source, batch_key, key), do: Source.fetch(source, batch_key, key)
 
   defp do_get({:ok, val}, :raise_on_error), do: val
   defp do_get({:ok, val}, :return_nil_on_error), do: val
@@ -255,18 +264,27 @@ defmodule Dataloader do
   defp do_get({:error, _reason}, :return_nil_on_error), do: nil
   defp do_get({:error, reason}, :tuples), do: {:error, reason}
 
+  defp do_timeout({:error, _reason}), do: nil
+  defp do_timeout(source), do: Source.timeout(source)
+
   def put(loader, source_name, batch_key, item_key, result) do
     source =
       loader
       |> get_source(source_name)
-      |> Source.put(batch_key, item_key, result)
+      |> do_put(batch_key, item_key, result)
 
     put_in(loader.sources[source_name], source)
   end
 
+  defp do_put({:error, reason}, _, _, _), do: {:error, reason}
+  defp do_put(source, batch_key, key, result), do: Source.put(source, batch_key, key, result)
+
   @spec pending_batches?(t) :: boolean
   def pending_batches?(loader) do
-    Enum.any?(loader.sources, fn {_name, source} -> Source.pending_batches?(source) end)
+    Enum.any?(loader.sources, fn
+      {_name, {:error, _}} -> false
+      {_name, source} -> Source.pending_batches?(source)
+    end)
   end
 
   defp get_source(loader, source_name) do
