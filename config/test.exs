@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 config :dataloader, Dataloader.TestRepo,
   hostname: "localhost",
@@ -11,4 +11,4 @@ config :dataloader,
   ecto_repos: [Dataloader.TestRepo],
   source_mock: Dataloader.TestSource.MockSource
 
-config :logger, level: :warn
+config :logger, level: :warning

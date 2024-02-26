@@ -111,15 +111,16 @@ defmodule DataloaderTest do
     test "exceeds timeout" do
       Dataloader.TestSource.MockSource
       # lowest possible timeout
-      |> expect(:timeout, fn _ -> 1 end)
+      |> expect(:timeout, 2, fn _ -> 1 end)
       # false would skip invoking Source.run/1
       |> expect(:pending_batches?, fn _ -> true end)
+      |> expect(:async?, fn _ -> true end)
       # Dataloader adds one second to every timeout, to trigger timeout we
       # need to hold longer than <timeout> + 1s
       |> expect(:run, fn _ -> Process.sleep(2) end)
 
       loader =
-        Dataloader.new(get_policy: :tuples, async?: true, timeout_margin: 0)
+        Dataloader.new(get_policy: :tuples, timeout_margin: 0)
         |> Dataloader.add_source(:test, %Dataloader.TestSource.SourceImpl{})
         |> Dataloader.run()
 
@@ -136,9 +137,10 @@ defmodule DataloaderTest do
 
     test "use highest timeout plus margin as timeout for all tasks" do
       Dataloader.TestSource.MockSource
-      |> expect(:timeout, 2, fn %{timeout: t} -> t end)
+      |> expect(:timeout, 4, fn %{timeout: t} -> t end)
       # pending_batches? is only checked for any?
       |> expect(:pending_batches?, fn _ -> true end)
+      |> expect(:async?, 2, fn _ -> true end)
       # Sleep for 2ms (not triggering timeout) or 11ms (triggering timeout)
       |> expect(:run, 2, fn s ->
         Process.sleep(s.timeout + 1)
@@ -146,7 +148,7 @@ defmodule DataloaderTest do
       end)
 
       loader =
-        Dataloader.new(get_policy: :tuples, async?: true, timeout_margin: 0)
+        Dataloader.new(get_policy: :tuples, timeout_margin: 0)
         |> Dataloader.add_source(:test_1, %Dataloader.TestSource.SourceImpl{timeout: 1})
         |> Dataloader.add_source(:test_10, %Dataloader.TestSource.SourceImpl{timeout: 10})
         |> Dataloader.run()

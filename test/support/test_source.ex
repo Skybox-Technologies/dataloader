@@ -19,6 +19,7 @@ defmodule Dataloader.TestSource do
                 term
               ) :: Dataloader.Source.t()
     @callback timeout(Dataloader.Source.t()) :: number
+    @callback async?(Dataloader.Source.t()) :: boolean
   end
 
   defmodule SourceImpl do
@@ -47,6 +48,10 @@ defmodule Dataloader.TestSource do
 
       def timeout(source) do
         Application.get_env(:dataloader, :source_mock).timeout(source)
+      end
+
+      def async?(source) do
+        Application.get_env(:dataloader, :source_mock).async?(source)
       end
     end
   end
