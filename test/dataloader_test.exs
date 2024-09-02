@@ -111,17 +111,21 @@ defmodule DataloaderTest do
     test "exceeds timeout" do
       Dataloader.TestSource.MockSource
       # lowest possible timeout
-      |> expect(:timeout, 2, fn _ -> 1 end)
+      |> expect(:timeout, 6, fn _ -> 1 end)
       # false would skip invoking Source.run/1
-      |> expect(:pending_batches?, fn _ -> true end)
-      |> expect(:async?, fn _ -> true end)
+      |> expect(:pending_batches?, 2, fn _ -> true end)
+      |> expect(:async?, 3, fn _ -> true end)
       # Dataloader adds one second to every timeout, to trigger timeout we
       # need to hold longer than <timeout> + 1s
-      |> expect(:run, fn _ -> Process.sleep(2) end)
+      |> expect(:run, 3, fn
+        %{name: :test} -> Process.sleep(2)
+        s -> s
+      end)
 
       loader =
         Dataloader.new(get_policy: :tuples, timeout_margin: 0)
-        |> Dataloader.add_source(:test, %Dataloader.TestSource.SourceImpl{})
+        |> Dataloader.add_source(:test, %Dataloader.TestSource.SourceImpl{name: :test})
+        |> Dataloader.add_source(:test2, %Dataloader.TestSource.SourceImpl{name: :test2})
         |> Dataloader.run()
 
       # Dataloader replaces the source struct with error tuple. There is
@@ -133,6 +137,8 @@ defmodule DataloaderTest do
       assert ^loader = Dataloader.load(loader, :test, :foo, :bar)
       # get returns the error, nil or raises a GetError
       assert {:error, :timeout} == Dataloader.get(loader, :test, :foo, :bar)
+      # run returns loader again
+      assert ^loader = Dataloader.run(loader)
     end
 
     test "use highest timeout plus margin as timeout for all tasks" do

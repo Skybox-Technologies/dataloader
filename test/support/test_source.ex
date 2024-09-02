@@ -23,7 +23,7 @@ defmodule Dataloader.TestSource do
   end
 
   defmodule SourceImpl do
-    defstruct timeout: 1
+    defstruct timeout: 1, name: nil
 
     defimpl Dataloader.Source do
       def load(source, batch_key, item_key) do

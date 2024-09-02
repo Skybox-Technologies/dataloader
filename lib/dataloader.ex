@@ -155,8 +155,12 @@ defmodule Dataloader do
 
       emit_start_event(id, system_time, dataloader)
 
-      {async_sources, sync_sources} =
+      {error_sources, ok_sources} =
         dataloader.sources
+        |> Enum.split_with(&match?({_name, {:error, _}}, &1))
+
+      {async_sources, sync_sources} =
+        ok_sources
         |> Enum.split_with(fn {_name, source} -> Dataloader.Source.async?(source) end)
 
       async_source_results =
@@ -191,9 +195,11 @@ defmodule Dataloader do
       sources =
         async_source_results
         |> Stream.concat(sync_source_results)
+        |> Stream.concat(error_sources)
         |> Stream.map(fn
           {_source, {:ok, {name, source}}} -> {name, source}
           {{name, _}, {:error, reason}} -> {name, {:error, reason}}
+          err_source -> err_source
         end)
         |> Map.new()
 
@@ -412,13 +418,13 @@ defmodule Dataloader do
   # Optionally use `async/1` and `async_stream/3` functions from
   # `opentelemetry_process_propagator` if available
   if Code.ensure_loaded?(OpentelemetryProcessPropagator.Task) do
-    @spec async((() -> any)) :: Task.t()
+    @spec async((-> any)) :: Task.t()
     defdelegate async(fun), to: OpentelemetryProcessPropagator.Task
 
     @spec async_stream(Enumerable.t(), (term -> term), keyword) :: Enumerable.t()
     defdelegate async_stream(items, fun, opts), to: OpentelemetryProcessPropagator.Task
   else
-    @spec async((() -> any)) :: Task.t()
+    @spec async((-> any)) :: Task.t()
     defdelegate async(fun), to: Task
 
     @spec async_stream(Enumerable.t(), (term -> term), keyword) :: Enumerable.t()
