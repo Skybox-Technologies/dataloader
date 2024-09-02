@@ -2,7 +2,7 @@ defmodule Dataloader.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/absinthe-graphql/dataloader"
-  @version "2.0.0-dev"
+  @version "2.0.0"
 
   def project do
     [
@@ -20,7 +20,8 @@ defmodule Dataloader.Mixfile do
       ],
       dialyzer: [
         plt_core_path: "priv/plts",
-        plt_add_apps: [:mix, :ecto, :ecto_sql, :opentelemetry_process_propagator]
+        plt_add_apps: [:mix, :ecto, :ecto_sql, :opentelemetry_process_propagator],
+        plt_add_deps: :apps_direct
       ]
     ]
   end
@@ -60,13 +61,13 @@ defmodule Dataloader.Mixfile do
 
   defp deps do
     [
-      {:telemetry, "~> 1.0 or ~> 0.4"},
+      {:telemetry, "~> 1.0"},
       {:ecto, ">= 3.4.3 and < 4.0.0", optional: true},
-      {:opentelemetry_process_propagator, "~> 0.3.0", optional: true},
+      {:opentelemetry_process_propagator, "~> 0.3 or ~> 0.2.1", optional: true},
       {:ecto_sql, "~> 3.0", optional: true, only: :test},
       {:postgrex, "~> 0.14", only: :test, runtime: false},
       {:mox, "~> 1.0", only: :test},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.3.0", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.24", only: :dev, runtime: false}
     ]
   end

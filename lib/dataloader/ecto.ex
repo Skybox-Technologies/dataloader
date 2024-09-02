@@ -365,7 +365,7 @@ if Code.ensure_loaded?(Ecto) do
 
       results =
         from(input in subquery(inputs_query), as: :input)
-        |> join(:inner_lateral, q in subquery(inner_query))
+        |> join(:inner_lateral, [], q in subquery(inner_query), on: true)
         |> select([_input, q], q)
         |> repo.all(repo_opts)
 
@@ -695,7 +695,7 @@ if Code.ensure_loaded?(Ecto) do
         records = records |> Enum.map(&Map.put(&1, field, empty))
 
         results =
-          if query.limit || query.offset || Enum.any?(query.order_bys) do
+          if query.limit || query.offset do
             records
             |> preload_lateral(field, query, source.repo, repo_opts)
           else
@@ -728,6 +728,7 @@ if Code.ensure_loaded?(Ecto) do
           from(x in schema,
             as: :parent,
             inner_lateral_join: y in subquery(inner_query),
+            on: true,
             where: field(x, ^pk) in ^Enum.map(structs, &Map.get(&1, pk)),
             select: {field(x, ^pk), y}
           )
