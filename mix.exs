@@ -2,7 +2,7 @@ defmodule Dataloader.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/absinthe-graphql/dataloader"
-  @version "2.0.0"
+  @version "2.0.1"
 
   def project do
     [
@@ -68,7 +68,8 @@ defmodule Dataloader.Mixfile do
       {:postgrex, "~> 0.14", only: :test, runtime: false},
       {:mox, "~> 1.0", only: :test},
       {:dialyxir, "~> 1.3.0", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.24", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.24", only: :dev, runtime: false},
+      {:jason, "~> 1.0", only: :test}
     ]
   end
 
