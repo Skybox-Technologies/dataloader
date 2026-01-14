@@ -145,6 +145,19 @@ defmodule Dataloader do
     Enum.reduce(vals, source, &Source.load(&2, batch_key, &1))
   end
 
+  @doc """
+  A note on error handling.
+  If a Source.run/1 call returns an error or times out, the source is considered failed and
+  irrecoverable. This is motivated by a two points:
+    * There is no way to clear the failing batches from a Source (currently), any future Source.run/1 will
+    retry the same batches with potential additional batches. If the issue causing a timeout is not
+    resolved between runs it will incurr severe delays to full response.
+    * If future Source.run/1 on failed Sources would be allowed, it is not possible to distinguish
+    between failures of future batch/key and the previous Source error without keeping track of
+    which batch was part of which run. Not distinguishing between different errors could be
+    very detrimental during debugging.
+  The above points could be addressed by designing a different protocol.
+  """
   @spec run(t) :: t
   def run(dataloader) do
     if pending_batches?(dataloader) do
@@ -195,12 +208,11 @@ defmodule Dataloader do
       sources =
         async_source_results
         |> Stream.concat(sync_source_results)
-        |> Stream.concat(error_sources)
         |> Stream.map(fn
           {_source, {:ok, {name, source}}} -> {name, source}
           {{name, _}, {:error, reason}} -> {name, {:error, reason}}
-          err_source -> err_source
         end)
+        |> Stream.concat(error_sources)
         |> Map.new()
 
       updated_dataloader = %{dataloader | sources: sources}
