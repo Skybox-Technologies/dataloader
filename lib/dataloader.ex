@@ -151,7 +151,7 @@ defmodule Dataloader do
   irrecoverable. This is motivated by a two points:
     * There is no way to clear the failing batches from a Source (currently), any future Source.run/1 will
     retry the same batches with potential additional batches. If the issue causing a timeout is not
-    resolved between runs it will incurr severe delays to full response.
+    resolved between runs it will incur severe delays to full response.
     * If future Source.run/1 on failed Sources would be allowed, it is not possible to distinguish
     between failures of future batch/key and the previous Source error without keeping track of
     which batch was part of which run. Not distinguishing between different errors could be
