@@ -574,4 +574,61 @@ defmodule Dataloader.EctoTest do
       assert ^user = loaded
     end)
   end
+
+  describe "failed batches" do
+    setup do
+      {:ok, agent} = Agent.start_link(fn -> true end)
+
+      # Raises on the first query, succeeds afterwards, simulating a
+      # transient database error (e.g. a connection pool timeout).
+      query = fn queryable, _ ->
+        if Agent.get_and_update(agent, &{&1, false}) do
+          raise "transient database error"
+        else
+          queryable
+        end
+      end
+
+      source = Dataloader.Ecto.new(Repo, query: query)
+
+      loader =
+        Dataloader.new(get_policy: :tuples)
+        |> Dataloader.add_source(Test, source)
+
+      {:ok, loader: loader}
+    end
+
+    test "a batch whose run failed is retried on the next load and run", %{loader: loader} do
+      user = %User{username: "Ben Wilson"} |> Repo.insert!()
+
+      loader =
+        loader
+        |> Dataloader.load(Test, User, user.id)
+        |> Dataloader.run()
+
+      assert {:error, _} = Dataloader.get(loader, Test, User, user.id)
+
+      loader =
+        loader
+        |> Dataloader.load(Test, User, user.id)
+        |> Dataloader.run()
+
+      assert {:ok, ^user} = Dataloader.get(loader, Test, User, user.id)
+    end
+
+    test "a value can be put into a batch whose run failed", %{loader: loader} do
+      user = %User{username: "Ben Wilson"} |> Repo.insert!()
+
+      loader =
+        loader
+        |> Dataloader.load(Test, User, user.id)
+        |> Dataloader.run()
+
+      assert {:error, _} = Dataloader.get(loader, Test, User, user.id)
+
+      loader = Dataloader.put(loader, Test, User, user.id, user)
+
+      assert {:ok, ^user} = Dataloader.get(loader, Test, User, user.id)
+    end
+  end
 end
