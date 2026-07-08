@@ -396,8 +396,17 @@ if Code.ensure_loaded?(Ecto) do
           )
 
         results =
-          Map.merge(source.results, results, fn _, {:ok, v1}, {:ok, v2} ->
-            {:ok, Map.merge(v1, v2)}
+          Map.merge(source.results, results, fn
+            _, {:ok, v1}, {:ok, v2} ->
+              {:ok, Map.merge(v1, v2)}
+
+            # `fetched?/3` treats an `{:error, _}` batch result as not fetched,
+            # so loading an item from a previously failed batch queues that
+            # batch again. The batch key then holds an error on one side of
+            # the merge and the retry outcome on the other; there is nothing
+            # to merge with an error, so the most recent outcome wins.
+            _, _previous, latest ->
+              latest
           end)
 
         %{source | results: results, batches: %{}}
@@ -440,7 +449,12 @@ if Code.ensure_loaded?(Ecto) do
             source.results,
             batch_key,
             {:ok, %{item_key => result}},
-            fn {:ok, map} -> {:ok, Map.put(map, item_key, result)} end
+            fn
+              {:ok, map} -> {:ok, Map.put(map, item_key, result)}
+              # Putting a value into a failed batch replaces the error,
+              # mirroring the retry semantics of `run/1`.
+              {:error, _} -> {:ok, %{item_key => result}}
+            end
           )
 
         %{source | results: results}
